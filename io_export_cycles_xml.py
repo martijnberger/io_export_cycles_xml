@@ -32,6 +32,7 @@ import xml.dom.minidom as dom
 import bpy
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import PointerProperty, StringProperty
+import math
 from mathutils import Matrix
 
 def strip(root):
@@ -92,7 +93,50 @@ class PHYSICS_PT_fluid_export(RenderButtonsPanel, bpy.types.Panel):
         layout.operator("export_mesh.cycles_xml")
 
 def matrix_to_str(m):
+    m = m.transposed()
     return " ".join([str(i) for v in m for i in v])
+
+def output_camera(scene, node):
+    x_res = (scene.render.resolution_x * scene.render.resolution_percentage) / 100
+    y_res = (scene.render.resolution_y * scene.render.resolution_percentage) / 100
+
+    etree.SubElement(node, 'camera', attrib={
+        'width': str(int(x_res)),
+        'height': str(int(y_res))})
+
+    cam_matrix = scene.camera.matrix_world  * Matrix.Scale(-1, 4, (0,0,1))
+
+    trans = etree.SubElement(node, 'transform', attrib={
+        'matrix': matrix_to_str(cam_matrix) })
+    etree.SubElement(trans, 'camera', attrib={
+        'type': 'perspective',
+        'fov': str((bpy.context.scene.camera.data.angle ) / math.pi * 180) })
+
+def output_background(world, node):
+    if not world.node_tree == None:
+        print("FIX ME We do not support node trees for world and will continue like nothing happened")
+
+    bg = etree.SubElement(node, 'background')
+    etree.SubElement(bg, 'background', attrib={
+    'name': 'bg', 'strength': '1.0', 'color': " ".join([str(x) for x in world.horizon_color])})
+    etree.SubElement(bg, 'connect', attrib={
+    'from': "bg background", 'to': "output surface" })
+
+
+
+
+def material_exporter(mat, node):
+    print("Exporting material {}".format(mat.name))
+    if mat.node_tree:
+        n = mat.node_tree
+        print("material has {} nodes, {} links".format(len(n.nodes), len(n.links)))
+
+        node = etree.SubElement(node, 'shader', attrib={
+            'name': mat.name})
+
+        
+
+
 
 # Export Operator
 class ExportCyclesXML(bpy.types.Operator, ExportHelper):
@@ -107,40 +151,11 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
 
         cycles_node = etree.Element('cycles')
 
-
-
         # get mesh
         scene = context.scene
 
-        x_res = (scene.render.resolution_x * scene.render.resolution_percentage) / 100
-        y_res = (scene.render.resolution_y * scene.render.resolution_percentage) / 100
-
-
-        etree.SubElement(cycles_node, 'camera', attrib={
-            'width': str(int(x_res)),
-            'height': str(int(y_res))})
-
-        cam_matrix = Matrix.Scale(-1, 4, (0,0,1)) * scene.camera.matrix_world
-        #cam_matrix.col[3] = scene.camera.matrix_world.col[3]
-        trans = etree.SubElement(cycles_node, 'transform', attrib={
-            'matrix': matrix_to_str(cam_matrix) })
-        etree.SubElement(trans, 'camera', attrib={
-            'type': 'perspective'})
-
-
-        bg = etree.SubElement(cycles_node, 'background')
-        etree.SubElement(bg, 'background', attrib={
-            'name': 'bg', 'strength': '1', 'color': "0.25, 0.25, 0.25"})
-        etree.SubElement(bg, 'connect', attrib={
-            'from': "bg background", 'to': "output surface" })
-
-
-        """<shader name="cube">
-            <checker_texture name="tex" scale="2.0" color1="0.8, 0.8, 0.8" color2="1.0,
-            <diffuse_bsdf name="cube_closure" roughness="0.0" />
-            <connect from="tex color" to="cube_closure color" />
-            <connect from="cube_closure bsdf" to="output surface" />
-        </shader>"""
+        output_camera(scene, cycles_node)
+        output_background(scene.world, cycles_node)
 
         shader = etree.SubElement(cycles_node, 'shader', attrib={
             'name': 'diff'})
@@ -152,6 +167,9 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
             'from': "cube_closure bsdf",
             'to': "output surface"
         })
+
+        for material in bpy.data.materials:
+            material_exporter(material, cycles_node)
 
         for object in (ob for ob in scene.objects if ob.is_visible(scene)):
             if object.type == 'LAMP':
@@ -179,9 +197,9 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
 
 
                 etree.SubElement(shader_state, 'light', attrib={
-                    'type': '1',
+                    'type': '0',
                     'cast_shadow': 'true',
-                    'size': '0.1'})
+                    'size': '0.01'})
 
             try:
                 mesh = object.to_mesh(scene, True, 'PREVIEW')
@@ -217,7 +235,9 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
                     if vcount==4:
                         uvs += " " + str(uvf.uv4[0]) + " " + str(uvf.uv4[1]) + " "
 
-                state = etree.SubElement(cycles_node, 'state', attrib={"shader": "diff"})
+                trans = etree.SubElement(cycles_node, 'transform', attrib={
+                        'matrix': matrix_to_str(object.matrix_world) })
+                state = etree.SubElement(trans, 'state', attrib={"shader": "diff"})
                 etree.SubElement(state, 'mesh', attrib={'nverts': nverts.strip(),
                                                      'name': object.name,
                                                      'verts': verts.strip(),
@@ -232,8 +252,9 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
                     for v in f.vertices:
                         verts += str(v) + " "
 
-
-                state = etree.SubElement(cycles_node, 'state', attrib={"shader": "diff"})
+                trans = etree.SubElement(cycles_node, 'transform', attrib={
+                        'matrix': matrix_to_str(object.matrix_world) })
+                state = etree.SubElement(trans, 'state', attrib={"shader": "diff"})
                 etree.SubElement(state, 'mesh', attrib={'nverts': nverts.strip(),
                                                      'name': object.name,
                                                      'verts': verts.strip(),
@@ -241,7 +262,6 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
 
         # write to file
         write(cycles_node, filepath)
-        print(etree.dump(cycles_node))
 
         return {'FINISHED'}
 
