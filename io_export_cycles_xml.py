@@ -34,6 +34,7 @@ from bpy_extras.io_utils import ExportHelper
 from bpy.props import PointerProperty, StringProperty
 import math
 from mathutils import Matrix
+import uuid
 
 def strip(root):
     root.text = None
@@ -124,15 +125,47 @@ def output_background(world, node):
 
 
 
+def color_string(c):
+    return "{} {} {}".format(*c)
+
 
 def material_exporter(mat, node):
     print("Exporting material {}".format(mat.name))
+
     if mat.node_tree:
         n = mat.node_tree
         print("material has {} nodes, {} links".format(len(n.nodes), len(n.links)))
 
         node = etree.SubElement(node, 'shader', attrib={
             'name': mat.name})
+
+
+        for n in mat.node_tree.nodes:
+            print("node {}".format(n))
+            if n.type == 'BSDF_DIFFUSE':
+                print("Diff node")
+            if n.type == 'OUTPUT_MATERIAL':
+                print("output")
+
+    else:
+        print("Material has no nodes")
+
+        node = etree.SubElement(node, 'shader', attrib={
+            'name': mat.name})
+
+        name = str(uuid.uuid4())
+
+
+        etree.SubElement(node, 'diffuse_bsdf', attrib={
+            'name': name,
+            'roughness': "0.0",
+            'color' : color_string(mat.diffuse_color)})
+        etree.SubElement(node, 'connect', attrib={
+            'from': "{} {}".format(name, "bsdf"),
+            'to': "output surface"
+        })
+
+
 
         
 
@@ -214,7 +247,7 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
             verts = ""
             uvs = ""
             P = ""
-
+            shader_name = object.material_slots[0].name
 
             for v in mesh.vertices:
                 P += "%f %f %f  " % (v.co[0], v.co[1], v.co[2])
@@ -237,7 +270,7 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
 
                 trans = etree.SubElement(cycles_node, 'transform', attrib={
                         'matrix': matrix_to_str(object.matrix_world) })
-                state = etree.SubElement(trans, 'state', attrib={"shader": "diff"})
+                state = etree.SubElement(trans, 'state', attrib={"shader": shader_name})
                 etree.SubElement(state, 'mesh', attrib={'nverts': nverts.strip(),
                                                      'name': object.name,
                                                      'verts': verts.strip(),
@@ -254,7 +287,7 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
 
                 trans = etree.SubElement(cycles_node, 'transform', attrib={
                         'matrix': matrix_to_str(object.matrix_world) })
-                state = etree.SubElement(trans, 'state', attrib={"shader": "diff"})
+                state = etree.SubElement(trans, 'state', attrib={"shader": shader_name})
                 etree.SubElement(state, 'mesh', attrib={'nverts': nverts.strip(),
                                                      'name': object.name,
                                                      'verts': verts.strip(),
