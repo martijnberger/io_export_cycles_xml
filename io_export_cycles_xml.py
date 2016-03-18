@@ -20,7 +20,7 @@ __license__ = "GPL"
 
 bl_info = {
     "name": "Cycles exporter",
-    'blender': (2, 7, 4),
+    'blender': (2, 7, 6),
     "description": "export scenes as cycles (xml)",
     "category": "Import-Export",
     "location": "File > Export" }
@@ -129,6 +129,11 @@ def color_string(c):
     return "{} {} {}".format(*c)
 
 
+def _s(s):
+    if s == "Material Output":
+        return "output"
+    return s.replace (" ", "_")
+
 def material_exporter(mat, node):
     print("Exporting material {}".format(mat.name))
 
@@ -136,16 +141,25 @@ def material_exporter(mat, node):
         n = mat.node_tree
         print("material has {} nodes, {} links".format(len(n.nodes), len(n.links)))
 
-        node = etree.SubElement(node, 'shader', attrib={
+        mat_node = etree.SubElement(node, 'shader', attrib={
             'name': mat.name})
 
 
         for n in mat.node_tree.nodes:
             print("node {}".format(n))
             if n.type == 'BSDF_DIFFUSE':
+                etree.SubElement(mat_node, 'diffuse_bsdf', attrib={
+                    'name': _s(n.name),
+                    'roughness': "0.0",
+                    'color' : color_string(mat.diffuse_color)})
                 print("Diff node")
             if n.type == 'OUTPUT_MATERIAL':
                 print("output")
+
+        for n in mat.node_tree.links:
+            etree.SubElement(mat_node, 'connect', attrib={
+                'from': "{} {}".format(_s(n.from_node.name),n.from_socket.name),
+                'to': "{} {}".format(_s(n.to_node.name),n.to_socket.name) })
 
     else:
         print("Material has no nodes")
