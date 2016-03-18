@@ -134,6 +134,19 @@ def _s(s):
         return "output"
     return s.replace (" ", "_")
 
+
+fix_dist = lambda s: s[:1].upper() + s[1:].lower() if s else ''
+
+def fix_distribution(d):
+    if d == "BECKMANN":
+        return "Beckmann"
+    elif d == "SHARP":
+        return "Sharp"
+    elif d == "ASHIKHMIN_SHIRLEY":
+        return "Ashikhmin-Shirley"
+    else:
+        return "GGX"
+
 def material_exporter(mat, node):
     print("Exporting material {}".format(mat.name))
 
@@ -151,10 +164,22 @@ def material_exporter(mat, node):
                 etree.SubElement(mat_node, 'diffuse_bsdf', attrib={
                     'name': _s(n.name),
                     'roughness': "0.0",
-                    'color' : color_string(mat.diffuse_color)})
-                print("Diff node")
+                    'color' : color_string(mat.diffuse_color) })
+            if n.type == 'BSDF_GLOSSY':
+                etree.SubElement(mat_node, 'glossy_bsdf', attrib={
+                    'name': _s(n.name),
+                    'distribution': fix_dist(n.distribution),
+                    'color' : color_string(mat.diffuse_color) })
+            if n.type == 'HUE_SAT':
+                etree.SubElement(mat_node, 'hsv', attrib={
+                    'name': _s(n.name),
+                })
+            if n.type == "MIX_SHADER":
+                etree.SubElement(mat_node, 'mix_closure', attrib={
+                    'name': _s(n.name),
+                })
             if n.type == 'OUTPUT_MATERIAL':
-                print("output")
+                pass
 
         for n in mat.node_tree.links:
             etree.SubElement(mat_node, 'connect', attrib={
