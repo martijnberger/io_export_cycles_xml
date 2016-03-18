@@ -135,8 +135,6 @@ def _s(s):
     return s.replace (" ", "_")
 
 
-fix_dist = lambda s: s[:1].upper() + s[1:].lower() if s else ''
-
 def fix_distribution(d):
     if d == "BECKMANN":
         return "Beckmann"
@@ -146,6 +144,7 @@ def fix_distribution(d):
         return "Ashikhmin-Shirley"
     else:
         return "GGX"
+
 
 def material_exporter(mat, node):
     print("Exporting material {}".format(mat.name))
@@ -168,7 +167,7 @@ def material_exporter(mat, node):
             if n.type == 'BSDF_GLOSSY':
                 etree.SubElement(mat_node, 'glossy_bsdf', attrib={
                     'name': _s(n.name),
-                    'distribution': fix_dist(n.distribution),
+                    'distribution': fix_distribution(n.distribution),
                     'color' : color_string(mat.diffuse_color) })
             if n.type == 'HUE_SAT':
                 etree.SubElement(mat_node, 'hsv', attrib={
@@ -178,13 +177,35 @@ def material_exporter(mat, node):
                 etree.SubElement(mat_node, 'mix_closure', attrib={
                     'name': _s(n.name),
                 })
+            if n.type == "ADD_SHADER":
+                etree.SubElement(mat_node, 'add_closure', attrib={
+                    'name': _s(n.name),
+                })
+            if n.type == "EMISSION":
+                etree.SubElement(mat_node, 'emission', attrib={
+                    'name': _s(n.name),
+                    'color' : color_string(mat.diffuse_color) })
             if n.type == 'OUTPUT_MATERIAL':
                 pass
 
         for n in mat.node_tree.links:
+            to_socket_id = n.to_socket.identifier
+
+
+            if n.to_node.type == "MIX_SHADER" or n.to_node.type == "ADD_SHADER":
+                if to_socket_id == "Shader.001":
+                    to_socket_id = "Closure2"
+                if to_socket_id == "Shader":
+                    to_socket_id = "Closure1"
+
+            from_socket_id = n.from_socket.name
+
+            if n.from_node.type == "MIX_SHADER" or n.from_node.type == "ADD_SHADER":
+                from_socket_id = "Closure"
+
             etree.SubElement(mat_node, 'connect', attrib={
-                'from': "{} {}".format(_s(n.from_node.name),n.from_socket.name),
-                'to': "{} {}".format(_s(n.to_node.name),n.to_socket.name) })
+                'from': "{} {}".format(_s(n.from_node.name), from_socket_id),
+                'to': "{} {}".format(_s(n.to_node.name), to_socket_id) })
 
     else:
         print("Material has no nodes")
