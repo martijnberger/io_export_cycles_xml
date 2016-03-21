@@ -163,12 +163,12 @@ def material_exporter(mat, node):
                 etree.SubElement(mat_node, 'diffuse_bsdf', attrib={
                     'name': _s(n.name),
                     'roughness': "0.0",
-                    'color' : color_string(mat.diffuse_color) })
+                    'color' : color_string(n.inputs[0].default_value) })
             if n.type == 'BSDF_GLOSSY':
                 etree.SubElement(mat_node, 'glossy_bsdf', attrib={
                     'name': _s(n.name),
                     'distribution': fix_distribution(n.distribution),
-                    'color' : color_string(mat.diffuse_color) })
+                    'color' : color_string(n.inputs[0].default_value) })
             if n.type == 'HUE_SAT':
                 etree.SubElement(mat_node, 'hsv', attrib={
                     'name': _s(n.name),
